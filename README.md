@@ -17,13 +17,7 @@
 - **Picks the right partition for you** – defaults to the biggest one (Content), but you can choose any other
 - **One file, nothing to install** – just run `360DriveMounter.exe`
 - Dark mode, safe unmounting, and a confirmation before closing
+<img width="842" height="512" alt="image" src="https://github.com/user-attachments/assets/8fcac77a-f65e-47e6-9e0a-562589f3f8aa" />
+<img width="842" height="512" alt="image" src="https://github.com/user-attachments/assets/d819715b-c150-4766-a570-8df17fc9f588" />
+<img width="1422" height="942" alt="image" src="https://github.com/user-attachments/assets/8c65aa3e-25a5-42b2-ada5-343294c58497" />
 
-## How to use
-
-1. Download **360DriveMounter.exe** from [Releases](../../releases).
-2. Plug in your Xbox 360 hard drive (SATA or a USB adapter).
-   If Windows asks to **initialize** the disk, click **Cancel**.
-3. Open **XboxMounter.exe** and click **Yes** on the admin prompt.
-   The first launch takes a few seconds to set up drive support.
-4. Pick a drive letter, click **Mount**, then **Open**.
-5. Click **Unmount** before unplugging the drive.
