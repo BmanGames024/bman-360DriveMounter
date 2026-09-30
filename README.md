@@ -1,3 +1,5 @@
+<div align="center">
+
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/built%20with-Python-3776AB?logo=python&logoColor=white)
 ![Version](https://img.shields.io/github/v/release/BmanGames024/bman-downloader?label=latest)
