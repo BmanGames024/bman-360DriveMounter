@@ -15,12 +15,12 @@
 - **Read & write** – copy files on and off, rename, delete, make folders (or tick *Read-only* to just look)
 - **Retail and devkit drives** – including RGLoader setups with the `DEVKIT` folder
 - **Picks the right partition for you** – defaults to the biggest one (Content), but you can choose any other
-- **One file, nothing to install** – just run `XboxMounter.exe`
+- **One file, nothing to install** – just run `360DriveMounter.exe`
 - Dark mode, safe unmounting, and a confirmation before closing
 
 ## How to use
 
-1. Download **XboxMounter.exe** from [Releases](../../releases).
+1. Download **360DriveMounter.exe** from [Releases](../../releases).
 2. Plug in your Xbox 360 hard drive (SATA or a USB adapter).
    If Windows asks to **initialize** the disk, click **Cancel**.
 3. Open **XboxMounter.exe** and click **Yes** on the admin prompt.
