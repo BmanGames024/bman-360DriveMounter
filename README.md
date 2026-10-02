@@ -10,7 +10,7 @@
 
 ---
 ## Features
-
+- **Smart Statsr** – does allow the viewing of smart stats using apps like CrystalDiskInfo
 - **Real drive letter** – the Xbox drive shows up in File Explorer like any USB stick
 - **Read & write** – copy files on and off, rename, delete, make folders (or tick *Read-only* to just look)
 - **Retail and devkit drives** – including RGLoader setups with the `DEVKIT` folder
