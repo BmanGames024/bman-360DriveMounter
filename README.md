@@ -10,12 +10,12 @@
 
 ---
 ## Features
-- **Smart Stats** – does allow the viewing of smart stats using apps like CrystalDiskInfo
-- **Real drive letter** – the Xbox drive shows up in File Explorer like any USB stick
-- **Read & write** – copy files on and off, rename, delete, make folders (or tick *Read-only* to just look)
-- **Retail and devkit drives** – including RGLoader setups with the `DEVKIT` folder
-- **Picks the right partition for you** – defaults to the biggest one (Content), but you can choose any other
-- **One file, nothing to install** – just run `360DriveMounter.exe`
+- **Smart Stats** - does allow the viewing of smart stats using apps like CrystalDiskInfo
+- **Real drive letter** - the Xbox drive shows up in File Explorer like any USB stick
+- **Read & write** - copy files on and off, rename, delete, make folders (or tick *Read-only* to just look)
+- **Retail and devkit drives** - including RGLoader setups with the `DEVKIT` folder
+- **Picks the right partition for you** - defaults to the biggest one (Content), but you can choose any other
+- **One file, nothing to install** - just run `360DriveMounter.exe`
 - Dark mode, safe unmounting, and a confirmation before closing
 <img width="842" height="512" alt="image" src="https://github.com/user-attachments/assets/8fcac77a-f65e-47e6-9e0a-562589f3f8aa" />
 <img width="842" height="512" alt="image" src="https://github.com/user-attachments/assets/d819715b-c150-4766-a570-8df17fc9f588" />
