@@ -1,4 +1,11 @@
 <div align="center">
+  <p>Join the Discord</p>
+  <a href="https://discord.gg/GJZAAFTc6h">
+    <img width="220" height="220" alt="image" src="https://github.com/user-attachments/assets/9db630c6-9fde-4399-9115-9367d03211c6" />
+  </a>
+</div>
+
+<div align="center">
 
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/built%20with-Python-3776AB?logo=python&logoColor=white)
