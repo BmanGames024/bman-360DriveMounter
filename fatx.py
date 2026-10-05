@@ -1,9 +1,11 @@
 
 from __future__ import annotations
 
+import bisect
 import datetime
 import errno
 import os
+import re
 import string
 import struct
 import sys
@@ -28,6 +30,9 @@ XBOX360_LAYOUT = [
     ("Compatibility",     0x120EB0000, 0x010000000),
     ("Content",           0x130EB0000, None),
 ]
+
+USB_FOLDER = "Xbox360"
+USB_DATA_OFFSET = 0x20000000
 
 
 class FatxError(Exception):
@@ -201,6 +206,99 @@ class BlockDevice:
                 blk[s - b0:e - b0] = buf[s - a_start:e - a_start]
 
 
+def usb_data_files(folder: str) -> list[str]:
+    found: dict[int, str] = {}
+    for name in os.listdir(folder):
+        m = re.match(r"^Data(\d{4})$", name, re.IGNORECASE)
+        path = os.path.join(folder, name)
+        if m and os.path.isfile(path):
+            found[int(m.group(1))] = path
+    if 0 not in found:
+        raise FatxError(f"No Data0000 file in {folder}")
+    for i in range(max(found) + 1):
+        if i not in found:
+            raise FatxError(f"Data{i:04d} is missing from {folder}")
+    return [found[i] for i in range(len(found))]
+
+
+class SplitFileDevice(BlockDevice):
+    def __init__(self, folder: str, writable: bool = False, cache_blocks: int = 512):
+        self.path = folder
+        self.writable = writable
+        self.model = "USB storage"
+        self._lock = threading.Lock()
+        self._cache = OrderedDict()
+        self._cache_max = cache_blocks
+        self._files: list = []
+        self._starts: list[int] = []
+        self._lengths: list[int] = []
+        pos = 0
+        try:
+            for path in usb_data_files(folder):
+                f = open(path, "r+b" if writable else "rb", buffering=0)
+                self._files.append(f)
+                length = f.seek(0, os.SEEK_END)
+                self._starts.append(pos)
+                self._lengths.append(length)
+                pos += length
+        except OSError:
+            self.close()
+            raise
+        self.size = pos
+
+    def close(self):
+        for f in self._files:
+            try:
+                f.close()
+            except OSError:
+                pass
+
+    def fsync(self):
+        if self.writable:
+            for f in self._files:
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
+
+    def _spans(self, start: int, length: int):
+        i = max(bisect.bisect_right(self._starts, start) - 1, 0)
+        while length > 0 and i < len(self._files):
+            inner = start - self._starts[i]
+            take = min(self._lengths[i] - inner, length)
+            if take > 0:
+                yield self._files[i], inner, take
+                start += take
+                length -= take
+            i += 1
+
+    def _raw_read(self, start: int, length: int) -> bytes:
+        chunks = []
+        for f, inner, take in self._spans(start, length):
+            f.seek(inner)
+            got = 0
+            while got < take:
+                data = f.read(take - got)
+                if not data:
+                    break
+                chunks.append(data)
+                got += len(data)
+        return b"".join(chunks)
+
+    def _raw_write(self, start: int, data) -> None:
+        view = memoryview(data)
+        for f, inner, take in self._spans(start, len(view)):
+            f.seek(inner)
+            part, view = view[:take], view[take:]
+            while len(part):
+                n = f.write(part)
+                if not n:
+                    raise _err(errno.EIO, "Disk write failed")
+                part = part[n:]
+        if len(view):
+            raise _err(errno.EIO, "Write outside the disk")
+
+
 ATTR_DIRECTORY = 0x10
 
 
@@ -282,7 +380,8 @@ def check_name(name: str) -> None:
 class FatxVolume:
     FAT_CHUNK = 256 * 1024
 
-    def __init__(self, dev: BlockDevice, offset: int, size: int | None = None, name: str = "FATX"):
+    def __init__(self, dev: BlockDevice, offset: int, size: int | None = None, name: str = "FATX",
+                 usb: bool = False):
         self.dev = dev
         self.offset = offset
         self.size = size if size else dev.size - offset
@@ -307,6 +406,9 @@ class FatxVolume:
         self.cluster_count = self.size // self.cluster_size
         self.fat_entry_size = 2 if self.cluster_count < 0xFFF0 else 4
         fat_bytes = (self.cluster_count * self.fat_entry_size + 0xFFF) & ~0xFFF
+        if usb:
+            self.fat_entry_size = 4
+            fat_bytes = ((self.cluster_count + 1) * 4 + 0xFFF) & ~0xFFF
         self.fat_offset = offset + 0x1000
         self.data_offset = self.fat_offset + fat_bytes
         self.max_cluster = min((offset + self.size - self.data_offset) // self.cluster_size,
@@ -853,6 +955,16 @@ def find_partitions(dev: BlockDevice, disk_desc: str) -> list[PartitionInfo]:
         except (FatxError, OSError, struct.error):
             return False
 
+    if isinstance(dev, SplitFileDevice):
+        off = USB_DATA_OFFSET
+        if dev.size <= off + 0x2000 or dev.read(off, 4) != b"XTAF":
+            return []
+        try:
+            FatxVolume(dev, off, dev.size - off, usb=True)
+        except (FatxError, OSError, struct.error):
+            return []
+        return [PartitionInfo(dev.path, disk_desc, "Content", off, dev.size - off)]
+
     if dev.read(0, 4) in (b"XTAF", b"FATX") and valid(0, dev.size):
         return [PartitionInfo(dev.path, disk_desc, "Partition", 0, dev.size)]
 
@@ -926,3 +1038,35 @@ def scan_image(path: str) -> list[PartitionInfo]:
         return find_partitions(dev, desc)
     finally:
         dev.close()
+
+
+def scan_usb_drives() -> list[PartitionInfo]:
+    parts: list[PartitionInfo] = []
+    if not IS_WINDOWS:
+        return parts
+    _k32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+    _k32.GetDriveTypeW.restype = wintypes.UINT
+    old_mode = _k32.SetErrorMode(1)
+    try:
+        mask = _k32.GetLogicalDrives()
+        for i, letter in enumerate(string.ascii_uppercase):
+            root = f"{letter}:\\"
+            if not (mask >> i) & 1 or _k32.GetDriveTypeW(root) not in (2, 3):
+                continue
+            folder = root + USB_FOLDER
+            try:
+                if not os.path.isfile(os.path.join(folder, "Data0000")):
+                    continue
+                dev = SplitFileDevice(folder)
+            except (FatxError, OSError):
+                continue
+            try:
+                desc = f"USB drive {letter}: ({human_size(dev.size)})"
+                parts.extend(find_partitions(dev, desc))
+            except OSError:
+                pass
+            finally:
+                dev.close()
+    finally:
+        _k32.SetErrorMode(old_mode)
+    return parts

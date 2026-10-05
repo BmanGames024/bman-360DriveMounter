@@ -11,7 +11,7 @@ try:
 except ImportError:
     from fuse import FUSE, FuseOSError, Operations
 
-from fatx import BlockDevice, FatxVolume
+from fatx import BlockDevice, FatxVolume, SplitFileDevice
 
 
 class FatxFS(Operations):
@@ -174,8 +174,9 @@ def main(argv=None):
                     help="unmount when 'UNMOUNT' is read from stdin or stdin closes (used by app.py)")
     args = ap.parse_args(argv)
 
-    dev = BlockDevice(args.source, writable=not args.readonly)
-    vol = FatxVolume(dev, int(args.offset, 0), int(args.size, 0) or None, args.label)
+    usb = not args.source.startswith("\\\\.\\") and os.path.isdir(args.source)
+    dev = (SplitFileDevice if usb else BlockDevice)(args.source, writable=not args.readonly)
+    vol = FatxVolume(dev, int(args.offset, 0), int(args.size, 0) or None, args.label, usb=usb)
     print(f"Opened {args.label}: {vol.max_cluster} clusters of {vol.cluster_size} bytes "
           f"({'read-write' if vol.writable else 'read-only'})", flush=True)
     print("Counting free space…", flush=True)

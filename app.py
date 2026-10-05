@@ -17,7 +17,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import ttk
 
-from fatx import PartitionInfo, human_size, scan_physical_drives
+from fatx import PartitionInfo, human_size, scan_physical_drives, scan_usb_drives
 
 FROZEN = getattr(sys, "frozen", False)
 HERE = Path(sys.executable if FROZEN else __file__).resolve().parent
@@ -517,6 +517,7 @@ class App(tk.Tk):
 
         def work():
             parts, denied = scan_physical_drives()
+            parts += scan_usb_drives()
             self.events.put(("scanned", parts, denied))
 
         threading.Thread(target=work, daemon=True).start()
