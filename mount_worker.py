@@ -11,7 +11,7 @@ try:
 except ImportError:
     from fuse import FUSE, FuseOSError, Operations
 
-from fatx import BlockDevice, FatxVolume, SplitFileDevice
+from fatx import MAX_FILE_SIZE, BlockDevice, FatxVolume, SplitFileDevice
 
 
 class FatxFS(Operations):
@@ -26,6 +26,15 @@ class FatxFS(Operations):
 
     def destroy(self, path):
         self.vol.sync()
+
+    def _too_big(self, path, size=0):
+        """Tell the app a file won't fit (it shows a popup), then refuse the operation.
+        size is the full file size when Windows told us up front, or 0 if unknown."""
+        try:
+            print(f"TOOBIG\t{size}\t{path}", flush=True)
+        except (OSError, ValueError, AttributeError):
+            pass
+        raise FuseOSError(errno.EFBIG)
 
     def _entry(self, path):
         e = self.vol.resolve(path)
@@ -90,9 +99,14 @@ class FatxFS(Operations):
         self.vol.rename(old, new)
 
     def truncate(self, path, length, fh=None):
+        # Explorer sets the final size before copying, so big files are caught here, up front.
+        if length > MAX_FILE_SIZE:
+            self._too_big(path, length)
         self.vol.truncate(path, length)
 
     def write(self, path, data, offset, fh):
+        if offset + len(data) > MAX_FILE_SIZE:
+            self._too_big(path)
         return self.vol.write_file(path, bytes(data), offset)
 
     def utimens(self, path, times=None):

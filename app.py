@@ -12,6 +12,7 @@ import string
 import subprocess
 import tempfile
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
@@ -120,6 +121,7 @@ MUTED = "#9a9a9a"
 DISABLED = "#5c5c5c"
 ACCENT = "#1F6AA5"
 ACCENT_HOVER = "#2A7DBF"
+LINK = "#6cb4ee"
 WARN = "#e3b341"
 ERROR = "#f85149"
 BANNER_BG, BANNER_BORDER, BANNER_FG = "#2a2310", "#5c4a14", "#f0d58a"
@@ -209,6 +211,25 @@ def set_dark_titlebar(win) -> None:
         pass
 
 
+def show_modal(win, parent) -> None:
+    """Centre a dialog over the app, bring it to the front, and wait until it closes."""
+    if parent.state() == "iconic":
+        parent.deiconify()
+    win.update_idletasks()
+    px, py = parent.winfo_rootx(), parent.winfo_rooty()
+    x = px + max((parent.winfo_width() - win.winfo_reqwidth()) // 2, 0)
+    y = py + max((parent.winfo_height() - win.winfo_reqheight()) // 3, 0)
+    win.geometry(f"+{x}+{y}")
+    win.deiconify()
+    set_dark_titlebar(win)
+    win.lift()
+    win.attributes("-topmost", True)
+    win.after(400, lambda: win.winfo_exists() and win.attributes("-topmost", False))
+    win.focus_force()
+    win.grab_set()
+    win.wait_window()
+
+
 class DarkDialog(tk.Toplevel):
     """Dark replacement for tkinter.messagebox (which always follows the light system style)."""
     GLYPHS = {"warning": ("⚠", WARN), "error": ("✕", ERROR), "question": ("?", ACCENT), "info": ("i", ACCENT)}
@@ -241,16 +262,7 @@ class DarkDialog(tk.Toplevel):
         self.bind("<Return>", lambda e: self._done(default))
         self.bind("<Escape>", lambda e: self._done(cancel))
         self.protocol("WM_DELETE_WINDOW", lambda: self._done(cancel))
-
-        self.update_idletasks()
-        px, py = parent.winfo_rootx(), parent.winfo_rooty()
-        x = px + max((parent.winfo_width() - self.winfo_reqwidth()) // 2, 0)
-        y = py + max((parent.winfo_height() - self.winfo_reqheight()) // 3, 0)
-        self.geometry(f"+{x}+{y}")
-        self.deiconify()
-        set_dark_titlebar(self)
-        self.grab_set()
-        self.wait_window()
+        show_modal(self, parent)
 
     def _done(self, value):
         self.result = value
@@ -267,6 +279,86 @@ def notify(parent, title, message, kind="error") -> None:
     DarkDialog(parent, title, message, kind, [("OK", True)], default=True, cancel=True)
 
 
+ISO_TIP = ("Xbox 360 game ISOs have to be converted before they go on the drive - for example "
+           "to Games on Demand format with a tool like Iso2God, which splits the game into "
+           "parts the Xbox can store.")
+
+
+class TooLargeDialog(tk.Toplevel):
+    """Laid out like Explorer's "Replace or Skip Files" box, for files over the 4 GB FATX limit.
+    result is "skip" or "skip_all"."""
+
+    def __init__(self, parent, dest: str, name: str, size: int):
+        super().__init__(parent)
+        self.withdraw()
+        self.title("File too large")
+        self.configure(bg=DIALOG_BG)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.result = "skip"
+
+        body = tk.Frame(self, bg=DIALOG_BG)
+        body.pack(fill="both", expand=True, padx=24, pady=(18, 18))
+        tk.Label(body, text=f"Copying to {dest}", fg=MUTED, bg=DIALOG_BG, font=FONT,
+                 anchor="w").pack(fill="x")
+        tk.Label(body, text=f"\u201c{name}\u201d is too large for the Xbox drive", fg=LINK,
+                 bg=DIALOG_BG, font=("Segoe UI", 14), anchor="w", justify="left",
+                 wraplength=500).pack(fill="x", pady=(6, 10))
+        size_note = f"This file is {human_size(size)}, so it " if size else "It "
+        tk.Label(body, text="Xbox 360 drives (FATX) can't store files bigger than 4 GB. "
+                            f"{size_note}wasn't copied.",
+                 fg=FG, bg=DIALOG_BG, font=FONT, anchor="w", justify="left",
+                 wraplength=500).pack(fill="x")
+        if name.lower().endswith(".iso"):
+            tip = tk.Frame(body, bg=BANNER_BG, highlightbackground=BANNER_BORDER, highlightthickness=1)
+            tip.pack(fill="x", pady=(12, 0))
+            tk.Label(tip, text="\u26a0  " + ISO_TIP, fg=BANNER_FG, bg=BANNER_BG, font=FONT,
+                     anchor="w", justify="left", wraplength=470).pack(fill="x", padx=10, pady=7)
+
+        options = tk.Frame(body, bg=DIALOG_BG)
+        options.pack(fill="x", pady=(14, 0))
+        self._option(options, "\u21b7", "Skip this file",
+                     "If Windows also shows an error for it, choose Skip there to copy the rest.",
+                     "skip")
+        self._option(options, "\u00bb", "Skip all files that are too large",
+                     "Don't show this again until the drive is unmounted.", "skip_all")
+
+        self.bind("<Return>", lambda e: self._done("skip"))
+        self.bind("<Escape>", lambda e: self._done("skip"))
+        self.protocol("WM_DELETE_WINDOW", lambda: self._done("skip"))
+        show_modal(self, parent)
+
+    def _option(self, parent, glyph, title, detail, value):
+        """One big clickable row, like the choices in Explorer's file-conflict dialog."""
+        row = tk.Frame(parent, bg=DIALOG_BG, cursor="hand2", highlightthickness=1,
+                       highlightbackground=DIALOG_BG)
+        row.pack(fill="x", pady=2)
+        icon = tk.Label(row, text=glyph, fg=LINK, bg=DIALOG_BG, font=("Segoe UI", 16), width=2)
+        icon.pack(side="left", padx=(8, 10), pady=6)
+        text = tk.Frame(row, bg=DIALOG_BG)
+        text.pack(side="left", fill="x", expand=True, pady=6)
+        head = tk.Label(text, text=title, fg=FG, bg=DIALOG_BG, font=("Segoe UI", 11), anchor="w")
+        head.pack(fill="x")
+        sub = tk.Label(text, text=detail, fg=MUTED, bg=DIALOG_BG, font=("Segoe UI", 9),
+                       anchor="w", justify="left", wraplength=420)
+        sub.pack(fill="x")
+        parts = (row, icon, text, head, sub)
+
+        def paint(bg, border):
+            for w in parts:
+                w.configure(bg=bg)
+            row.configure(highlightbackground=border)
+
+        for w in parts:
+            w.bind("<Enter>", lambda e: paint(HOVER, BORDER))
+            w.bind("<Leave>", lambda e: paint(DIALOG_BG, DIALOG_BG))
+            w.bind("<Button-1>", lambda e: self._done(value))
+
+    def _done(self, value):
+        self.result = value
+        self.destroy()
+
+
 class Mount:
     def __init__(self, part: PartitionInfo, letter: str, proc: subprocess.Popen, readonly: bool):
         self.part = part
@@ -276,6 +368,8 @@ class Mount:
         self.mounted = False
         self.unmounting = False
         self.log: list[str] = []
+        self.skip_too_big = False
+        self.too_big_seen: dict[str, float] = {}
 
 
 class App(tk.Tk):
@@ -568,6 +662,10 @@ class App(tk.Tk):
 
     def _watch(self, key: str, m: Mount):
         for line in m.proc.stdout:
+            if line.startswith("TOOBIG\t"):
+                _, size, path = line.rstrip("\r\n").split("\t", 2)
+                self.events.put(("toobig", key, path, int(size or 0)))
+                continue
             line = line.rstrip()
             m.log.append(line)
             if line == "MOUNTED":
@@ -657,6 +755,19 @@ class App(tk.Tk):
                         mode = "read-only" if m.readonly else "read-write"
                         self.status.set(f"{m.part.name} mounted as {m.letter}: ({mode}).")
                         self.render()
+                elif kind == "toobig":
+                    _, key, path, size = ev
+                    m = self.mounts.get(key)
+                    seen = m.too_big_seen.get(path) if m else None
+                    # Windows retries a failed file a few times; only ask once per file.
+                    if not m or m.skip_too_big or (seen and time.monotonic() - seen < 30):
+                        continue
+                    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+                    self.status.set(f"{name} wasn't copied - Xbox files can't be larger than 4 GB.")
+                    d = TooLargeDialog(self, f"Xbox 360 {m.part.name} ({m.letter}:)", name, size)
+                    m.too_big_seen[path] = time.monotonic()
+                    if d.result == "skip_all":
+                        m.skip_too_big = True
                 elif kind == "exited":
                     m = self.mounts.pop(ev[1], None)
                     if m:
